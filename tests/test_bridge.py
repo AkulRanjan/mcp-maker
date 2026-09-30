@@ -39,3 +39,43 @@ async def test_bridge_stays_alive_when_upstream_is_down():
         with pytest.raises(Exception, match=url):
             await c.list_tools()
         assert await c.ping()
+
+
+def test_headers_from_env_malformed_names_var_not_value():
+    with pytest.raises(ValueError) as info:
+        headers_from_env({"MCPMAKER_HEADER_1": "supersecretvalue"})
+    assert "MCPMAKER_HEADER_1" in str(info.value)
+    assert "supersecretvalue" not in str(info.value)
+
+
+def test_bridge_command_reports_malformed_env_header_without_value():
+    import subprocess
+
+    env = {**os.environ, "MCPMAKER_HEADER_1": "supersecretvalue"}
+    proc = subprocess.run(
+        [sys.executable, "-m", "mcpmaker", "bridge", "--url", "http://127.0.0.1:1/mcp"],
+        env=env, capture_output=True, text=True, timeout=30,
+    )
+    out = proc.stdout + proc.stderr
+    assert proc.returncode != 0
+    assert "MCPMAKER_HEADER_1" in out
+    assert "supersecretvalue" not in out
+
+
+async def test_bridge_tool_call_names_url_when_upstream_goes_down_then_recovers():
+    port = free_port()
+    url = f"http://127.0.0.1:{port}/mcp"
+    headers = {"MCPMAKER_HEADER_1": "Authorization: Bearer good-token"}
+    app = make_app()
+    mount_mcp(app)
+    async with bridge_client(url, headers) as c:
+        with run_server(app, port=port):
+            assert "me" in {t.name for t in await c.list_tools()}
+        result = await c.call_tool("me", {}, raise_on_error=False)
+        assert result.is_error
+        assert url in "".join(getattr(x, "text", "") for x in result.content)
+        app2 = make_app()
+        mount_mcp(app2)
+        with run_server(app2, port=port):
+            again = await c.call_tool("me", {}, raise_on_error=False)
+            assert not again.is_error

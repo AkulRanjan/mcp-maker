@@ -7,6 +7,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping, TypeVar
 
+import anyio
 import httpx
 from fastmcp import Client, FastMCP
 from fastmcp.client.transports import StreamableHttpTransport
@@ -209,17 +210,31 @@ def run_stdio_bridge(url: str, headers: Mapping[str, str]) -> None:
     # The stock proxy forwards `initialize` upstream and fails the whole session if that fails.
     proxy.middleware[:] = [m for m in proxy.middleware if not isinstance(m, ProxyInitializeMiddleware)]
 
+    def _unreachable(exc: BaseException) -> bool:
+        return _is_upstream_unreachable(exc)
+
+    def _named(exc: BaseException) -> str:
+        return f"Cannot reach upstream MCP server at {url}: {exc}"
+
     class _NameUpstream(Middleware):
         async def on_message(self, context: Any, call_next: Any) -> Any:
             try:
                 return await call_next(context)
-            except (RuntimeError, httpx.HTTPError) as exc:
+            except Exception as exc:
+                if not _unreachable(exc):
+                    raise
                 raise McpError(
-                    mcp_types.ErrorData(
-                        code=mcp_types.INTERNAL_ERROR,
-                        message=f"Cannot reach upstream MCP server at {url}: {exc}",
-                    )
+                    mcp_types.ErrorData(code=mcp_types.INTERNAL_ERROR, message=_named(exc))
                 ) from exc
+
+        async def on_call_tool(self, context: Any, call_next: Any) -> Any:
+            # FastMCP turns tool-call failures into ToolError before on_message sees them.
+            try:
+                return await call_next(context)
+            except Exception as exc:
+                if not _unreachable(exc):
+                    raise
+                raise ToolError(_named(exc)) from exc
 
     proxy.add_middleware(_NameUpstream())
 
@@ -229,3 +244,32 @@ def run_stdio_bridge(url: str, headers: Mapping[str, str]) -> None:
 
     proxy._mcp_server.request_handlers[mcp_types.PingRequest] = _local_ping
     proxy.run(transport="stdio", show_banner=False)
+
+
+_UNREACHABLE = (
+    httpx.TransportError,
+    ConnectionError,
+    TimeoutError,
+    anyio.ClosedResourceError,
+    anyio.EndOfStream,
+    anyio.BrokenResourceError,
+)
+
+
+def _is_upstream_unreachable(exc: BaseException) -> bool:
+    """True if `exc` or anything in its cause/context/group chain is a connect/transport failure.
+
+    FastMCP wraps connect failures as `RuntimeError("Client failed to connect: ...")` chained
+    from the real error, so we inspect the chain rather than the wrapper.
+    """
+    stack, seen = [exc], set()
+    while stack:
+        current = stack.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        if isinstance(current, _UNREACHABLE):
+            return True
+        stack.extend(getattr(current, "exceptions", ()) or ())
+        stack.extend(e for e in (current.__cause__, current.__context__) if e is not None)
+    return False

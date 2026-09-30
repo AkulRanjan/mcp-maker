@@ -13,8 +13,8 @@ def free_port() -> int:
 
 
 @contextmanager
-def run_server(app):
-    port = free_port()
+def run_server(app, port=None):
+    port = port or free_port()
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning", lifespan="on"))
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()
