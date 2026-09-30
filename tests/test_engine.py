@@ -94,3 +94,25 @@ def test_build_with_fallback_skips_only_the_broken_operation():
 def test_build_with_fallback_happy_path_skips_nothing():
     built, skipped = build_with_fallback({"a": "x"}, lambda names: dict(names))
     assert built == {"a": "x"} and skipped == []
+
+
+async def test_transport_error_says_api_unreachable():
+    app = make_app()
+    spec = app.openapi()
+    selection = select_operations(operations_from_spec(spec, endpoint_names(app)))
+
+    def handler(request):
+        raise httpx.ConnectError("connection refused")
+
+    client = make_api_client(
+        base_url="http://mcpmaker.internal",
+        auth=PassThroughAuth(),
+        transport=httpx.MockTransport(handler),
+    )
+    srv, _ = build_server(spec, name="Sample API", selection=selection, client=client)
+    async with Client(srv) as c:
+        result = await c.call_tool("get_item", {"item_id": 1}, raise_on_error=False)
+    assert result.is_error
+    assert "could not reach the API" in text_of(result)
+    assert "ConnectError" in text_of(result)
+    assert text_of(result) != GENERIC_ERROR

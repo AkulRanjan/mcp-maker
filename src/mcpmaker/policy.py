@@ -109,7 +109,8 @@ def select_operations(
         if reason is not None:
             sel.hidden.append(Hidden(op, reason))
             continue
-        base = sanitize_name(op.function_name or op.operation_id)
+        # FastMCP collapses runs of underscores in tool names, so do it here to keep report and server in sync.
+        base = "_".join(part for part in sanitize_name(op.function_name or op.operation_id).split("_") if part)
         name = _dedupe(base, used)
         if name != base:
             sel.warnings.append(f"tool name collision: {op.method} {op.path} renamed '{base}' -> '{name}'")

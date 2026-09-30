@@ -88,11 +88,29 @@ def _error_message(tool: str, state: Mapping[str, Any], exc: BaseException) -> s
             message += f"\n{AUTH_HINT}"
         return message
     if state.get("sent"):
+        transport_error = _find_transport_error(exc)
+        if transport_error is not None:
+            log.error("mcpmaker: tool %r could not reach the API", tool, exc_info=exc)
+            return f"could not reach the API ({type(transport_error).__name__})"
         # The request reached the route and it blew up: log everything, tell the model nothing internal.
         log.error("mcpmaker: tool %r failed inside the API route", tool, exc_info=exc)
         return GENERIC_ERROR
     # Failed before any HTTP request (e.g. bad arguments): the message is safe and useful to the model.
     return str(exc) or GENERIC_ERROR
+
+
+def _find_transport_error(exc: BaseException) -> httpx.TransportError | None:
+    stack, seen = [exc], set()
+    while stack:
+        current = stack.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        if isinstance(current, httpx.TransportError):
+            return current
+        stack.extend(getattr(current, "exceptions", ()) or ())
+        stack.extend(e for e in (current.__cause__, current.__context__) if e is not None)
+    return None
 
 
 def build_with_fallback(

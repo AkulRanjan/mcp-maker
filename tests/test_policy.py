@@ -128,3 +128,9 @@ def test_ensure_operation_ids_fills_missing_without_mutating_input():
     out = ensure_operation_ids(spec)
     assert out["paths"]["/items/{id}"]["get"]["operationId"] == "get__items__id"
     assert "operationId" not in spec["paths"]["/items/{id}"]["get"]
+
+
+def test_tool_names_have_no_repeated_underscores():
+    spec = {"paths": {"/items/{item_id}": {"get": {"operationId": "get_item_items__item_id__get"}}}}
+    sel = select_operations(operations_from_spec(spec))
+    assert sel.exposed["get_item_items__item_id__get"] == "get_item_items_item_id_get"
