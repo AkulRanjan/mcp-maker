@@ -186,3 +186,46 @@ def _find_status(exc: BaseException) -> int | None:
         stack.extend(getattr(current, "exceptions", ()) or ())
         stack.extend(e for e in (current.__cause__, current.__context__) if e is not None)
     return None
+
+
+def run_stdio_bridge(url: str, headers: Mapping[str, str]) -> None:
+    """Serve MCP over stdio, relaying every request to the Streamable-HTTP endpoint at `url`.
+
+    Stays alive when upstream is unreachable: initialize is answered locally and each
+    request surfaces its own error (retried on the next request).
+    """
+    import mcp.types as mcp_types
+    from mcp.shared.exceptions import McpError
+    from fastmcp.server import create_proxy
+    from fastmcp.server.providers.proxy import ProxyInitializeMiddleware
+
+    # NOTE: relies on private FastMCP internals (`proxy.middleware` list contents and
+    # `proxy._mcp_server.request_handlers`). test_bridge_stays_alive_when_upstream_is_down guards them.
+    proxy = create_proxy(
+        StreamableHttpTransport(url, headers=dict(headers)),
+        name="mcpmaker-bridge",
+        provider_error_strategy="raise",
+    )
+    # The stock proxy forwards `initialize` upstream and fails the whole session if that fails.
+    proxy.middleware[:] = [m for m in proxy.middleware if not isinstance(m, ProxyInitializeMiddleware)]
+
+    class _NameUpstream(Middleware):
+        async def on_message(self, context: Any, call_next: Any) -> Any:
+            try:
+                return await call_next(context)
+            except (RuntimeError, httpx.HTTPError) as exc:
+                raise McpError(
+                    mcp_types.ErrorData(
+                        code=mcp_types.INTERNAL_ERROR,
+                        message=f"Cannot reach upstream MCP server at {url}: {exc}",
+                    )
+                ) from exc
+
+    proxy.add_middleware(_NameUpstream())
+
+    # Likewise `ping` is upstream-forwarded; answer it locally so the stdio side stays healthy.
+    async def _local_ping(_request: Any) -> Any:
+        return mcp_types.ServerResult(mcp_types.EmptyResult())
+
+    proxy._mcp_server.request_handlers[mcp_types.PingRequest] = _local_ping
+    proxy.run(transport="stdio", show_banner=False)

@@ -1,5 +1,6 @@
 import typer
 
+from mcpmaker.cli.bridge import bridge
 from mcpmaker.cli.connect import connect
 from mcpmaker.cli.doctor import doctor
 
@@ -13,3 +14,4 @@ def main() -> None:
 
 app.command()(connect)
 app.command()(doctor)
+app.command()(bridge)
