@@ -20,6 +20,7 @@ LITERAL_HEADERS = {"Authorization": "Bearer t0k"}  # VS Code does not reliably e
 def api_token(monkeypatch):
     monkeypatch.setenv("API_TOKEN", "t0k")
 
+
 JSON_CASES = [
     (CursorAdapter, "mcpServers", {"url": URL, "headers": ENV_HEADERS}),
     (VSCodeAdapter, "servers", {"type": "http", "url": URL, "headers": LITERAL_HEADERS}),
@@ -134,8 +135,7 @@ def test_detect_follows_client_directory(fake_home, cls):
     assert adapter.detect() is True
 
 
-def test_claude_desktop_uses_bridge_with_literal_header(fake_home, monkeypatch):
-    monkeypatch.setenv("API_TOKEN", "t0k")
+def test_claude_desktop_uses_bridge_with_literal_header(fake_home):
     adapter = ClaudeDesktopAdapter()
     result = adapter.install(ENTRY)
     assert result.status == "installed"
@@ -178,3 +178,16 @@ def test_vscode_missing_env_var_fails_cleanly(fake_home, monkeypatch):
     result = VSCodeAdapter().install(ENTRY)
     assert result.status == "failed"
     assert "API_TOKEN" in result.message
+
+
+@pytest.mark.parametrize("cls", [VSCodeAdapter, ClaudeDesktopAdapter, CursorAdapter, WindsurfAdapter])
+def test_failure_snippet_masks_header_values(fake_home, cls):
+    adapter = cls()
+    path = adapter.config_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("{ not json", encoding="utf-8")
+    result = adapter.install(ENTRY)
+    assert result.status == "failed"
+    assert "t0k" not in result.message
+    assert "<your Authorization value>" in result.message
+    assert '"sample-api"' in result.message

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace as dc_replace
 from pathlib import Path
 from typing import Any, Literal, Mapping, Protocol
 
@@ -92,6 +92,12 @@ class JsonClientAdapter:
         servers = data.get(self.root_key)
         return servers if isinstance(servers, dict) else {}
 
+    def masked_snippet(self, entry: ServerEntry) -> str:
+        """Copy-paste snippet with every header value replaced by a placeholder, so no secret is shown."""
+        masked = dc_replace(entry, headers={k: f"<your {k} value>" for k in entry.headers})
+        block, _ = self.build_block(masked)
+        return json.dumps({self.root_key: {entry.name: block}}, indent=2)
+
     def install(self, entry: ServerEntry, *, replace: bool = False, force: bool = False) -> InstallResult:
         path = self.config_path()
 
@@ -102,7 +108,7 @@ class JsonClientAdapter:
             block, warnings = self.build_block(entry)
         except ConfigError as exc:
             return result("failed", str(exc))
-        snippet = json.dumps({self.root_key: {entry.name: block}}, indent=2)
+        snippet = self.masked_snippet(entry)
 
         try:
             data = load_json(path)
