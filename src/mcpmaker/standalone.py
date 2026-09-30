@@ -23,7 +23,7 @@ def load_spec(source: str) -> dict[str, Any]:
             text = response.text
         else:
             text = Path(source).read_text(encoding="utf-8-sig")
-    except (OSError, httpx.HTTPError) as exc:
+    except (OSError, httpx.HTTPError, httpx.InvalidURL) as exc:
         raise ValueError(f"cannot read {source}: {type(exc).__name__}: {exc}") from None
     try:
         data = json.loads(text)

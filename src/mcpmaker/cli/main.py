@@ -5,7 +5,7 @@ from mcpmaker.cli.connect import connect
 from mcpmaker.cli.doctor import doctor
 from mcpmaker.cli.serve import serve
 
-app = typer.Typer(no_args_is_help=True, add_completion=False)
+app = typer.Typer(no_args_is_help=True, add_completion=False, pretty_exceptions_show_locals=False)
 
 
 @app.callback()

@@ -29,5 +29,5 @@ class PassThroughAuth:
 def parse_header(raw: str) -> tuple[str, str]:
     name, sep, value = raw.partition(":")
     if not sep or not name.strip():
-        raise ValueError(f"invalid header {raw!r}: expected 'Name: value'")
+        raise ValueError("invalid header: expected 'Name: value'")
     return name.strip(), value.strip()

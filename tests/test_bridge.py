@@ -54,7 +54,7 @@ def test_bridge_command_reports_malformed_env_header_without_value():
     env = {**os.environ, "MCPMAKER_HEADER_1": "supersecretvalue"}
     proc = subprocess.run(
         [sys.executable, "-m", "mcpmaker", "bridge", "--url", "http://127.0.0.1:1/mcp"],
-        env=env, capture_output=True, text=True, timeout=30,
+        env=env, capture_output=True, encoding="utf-8", errors="replace", timeout=30,
     )
     out = proc.stdout + proc.stderr
     assert proc.returncode != 0

@@ -27,3 +27,12 @@ def test_parse_header():
 def test_parse_header_rejects_bad_input(raw):
     with pytest.raises(ValueError, match="Name: value"):
         parse_header(raw)
+
+
+def test_parse_header_error_never_echoes_the_raw_value():
+    import pytest
+    from mcpmaker.auth import parse_header
+
+    with pytest.raises(ValueError, match="Name: value") as info:
+        parse_header("Bearer leakme123")
+    assert "leakme123" not in str(info.value)

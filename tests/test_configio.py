@@ -59,3 +59,10 @@ def test_render_literal_missing_var(monkeypatch):
     monkeypatch.delenv("NOPE_TOKEN", raising=False)
     with pytest.raises(MissingEnvVar, match="NOPE_TOKEN"):
         render_value("Bearer ${NOPE_TOKEN}", "literal")
+
+
+def test_load_undecodable_bytes_raise_config_error(tmp_path):
+    path = tmp_path / "mcp.json"
+    path.write_bytes("{}".encode("utf-16"))
+    with pytest.raises(ConfigError, match="cannot read"):
+        load_json(path)

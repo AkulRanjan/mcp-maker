@@ -25,7 +25,10 @@ class MissingEnvVar(ConfigError):
 def load_json(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
-    text = path.read_text(encoding="utf-8-sig")
+    try:
+        text = path.read_text(encoding="utf-8-sig")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise ConfigError(f"cannot read {path}: {type(exc).__name__}") from None
     if not text.strip():
         return {}
     try:

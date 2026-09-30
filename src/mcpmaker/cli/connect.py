@@ -54,6 +54,12 @@ def connect(
         found = asyncio.run(probe(url, _resolved(raw_headers)))
         if found.connected and found.server_name:
             name = slugify(found.server_name)
+        elif found.status_code in (401, 403):
+            name = DEFAULT_NAME
+            echo_ascii(
+                f"note: {url} rejected the request (HTTP {found.status_code}); using server name '{name}' "
+                "- check --header / API_TOKEN (pass --name to choose)"
+            )
         else:
             name = DEFAULT_NAME
             echo_ascii(f"note: {url} is not reachable right now; using server name '{name}' (pass --name to choose)")

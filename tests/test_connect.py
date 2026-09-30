@@ -116,3 +116,33 @@ def test_header_value_is_written_but_never_printed(fake_home, monkeypatch):
     assert result.exit_code == 0, result.output
     assert "secret-xyz" in vscode.config_path().read_text(encoding="utf-8")
     assert "secret-xyz" not in result.output
+
+
+def test_mistyped_header_does_not_echo_the_secret(fake_home, monkeypatch):
+    setup(monkeypatch)
+    result = runner.invoke(app, ["connect", "--url", URL, "-H", "Bearer leakme123", "--all", "--yes"])
+    assert result.exit_code == 2
+    assert "leakme123" not in result.output
+
+
+def test_utf16_config_fails_cleanly(fake_home, monkeypatch):
+    cursor, _, _ = setup(monkeypatch)
+    cursor.config_path().write_bytes("{}".encode("utf-16"))
+    result = runner.invoke(app, ["connect", "--url", URL, "--client", "cursor", "--yes"])
+    assert result.exit_code == 1, result.output
+    assert "FAIL Cursor: failed" in result.output
+    assert "Traceback" not in result.output
+    assert result.exception is None or isinstance(result.exception, SystemExit)
+
+
+def test_auth_rejection_note_is_not_reachability(fake_home, monkeypatch):
+    setup(monkeypatch)
+
+    async def rejected(url, headers, call_tool=None, timeout=10.0):
+        return ProbeResult(connected=False, status_code=401)
+
+    monkeypatch.setattr(connect_mod, "probe", rejected)
+    result = runner.invoke(app, ["connect", "--url", URL, "--client", "cursor", "--yes"])
+    assert "rejected the request (HTTP 401)" in result.output
+    assert "not reachable" not in result.output
+    assert "check --header / API_TOKEN" in result.output

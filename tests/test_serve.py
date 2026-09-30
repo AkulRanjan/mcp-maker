@@ -64,3 +64,28 @@ async def test_serve_proxies_calls_and_forwards_auth(spec):
                 me = await c.call_tool(tool["/me"], {}, raise_on_error=False)
     assert "apple" in item.content[0].text
     assert not me.is_error and "alice" in me.content[0].text
+
+
+def _spec_file(tmp_path, doc):
+    p = tmp_path / "spec.json"
+    p.write_text(json.dumps(doc), encoding="utf-8")
+    return str(p)
+
+
+def test_serve_rejects_bad_path(tmp_path, spec):
+    for bad in ("/", "mcp", "/mcp/"):
+        result = CliRunner().invoke(cli_app, ["serve", _spec_file(tmp_path, spec), "--base-url", "http://x", "--path", bad])
+        assert result.exit_code == 2, bad
+
+
+def test_serve_unsupported_spec_exits_2_without_traceback(tmp_path):
+    doc = {"swagger": "2.0", "paths": {"/x": {"get": {}}}}
+    result = CliRunner().invoke(cli_app, ["serve", _spec_file(tmp_path, doc), "--base-url", "http://x"])
+    assert result.exit_code == 2, result.output
+    assert "OpenAPI 3.x required" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_load_spec_invalid_url_is_value_error():
+    with pytest.raises(ValueError, match="cannot read"):
+        load_spec("https://[::1")

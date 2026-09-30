@@ -20,18 +20,26 @@ def serve(
     path: str = typer.Option("/mcp", "--path"),
 ) -> None:
     """Run a standalone MCP server that proxies tool calls to an existing HTTP API."""
+    if not path.startswith("/") or path.endswith("/"):
+        raise typer.BadParameter("must start with '/' and not end with '/', e.g. /mcp", param_hint="--path")
     try:
         document = load_spec(spec)
     except ValueError as exc:
         raise typer.BadParameter(str(exc), param_hint="SPEC")
-    app, report = build_standalone_app(
-        document,
-        base_url=base_url,
-        include_writes=include_writes,
-        exclude=exclude or [],
-        forward_headers=forward_header or [],
-        path=path,
-    )
+    try:
+        app, report = build_standalone_app(
+            document,
+            base_url=base_url,
+            include_writes=include_writes,
+            exclude=exclude or [],
+            forward_headers=forward_header or [],
+            path=path,
+        )
+    except Exception as exc:
+        raise typer.BadParameter(
+            f"could not build an MCP server from this spec (OpenAPI 3.x required): {type(exc).__name__}: {exc}",
+            param_hint="SPEC",
+        ) from None
     for line in report.format().splitlines():
         echo_ascii(line)
     echo_ascii(f"MCP endpoint: http://{host}:{port}{path}")
