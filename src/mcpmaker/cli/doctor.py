@@ -87,11 +87,15 @@ def run_checks(url: str, headers: dict, call: Optional[str]) -> List[Check]:
     return checks
 
 
+def echo_ascii(line: str) -> None:
+    """Print a line that is safe for any console encoding (server-supplied text may be non-ASCII)."""
+    typer.echo(line.encode("ascii", "replace").decode("ascii"))
+
+
 def print_checks(checks: List[Check]) -> bool:
     for check in checks:
         line = f"{check.status:<4} {check.name}" + (f": {check.detail}" if check.detail else "")
-        # Server-supplied text may be non-ASCII; keep output safe for any console encoding.
-        typer.echo(line.encode("ascii", "replace").decode("ascii"))
+        echo_ascii(line)
     return any(c.status == "FAIL" for c in checks)
 
 
