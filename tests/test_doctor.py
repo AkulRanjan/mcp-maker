@@ -100,3 +100,31 @@ async def _leaky_probe(url, headers, call_tool=None, timeout=10.0):
     from mcpmaker.engine import ProbeResult
 
     return ProbeResult(connected=False, error=f"RuntimeError: server echoed {headers['Authorization']}")
+
+
+def test_doctor_call_failure_has_fix_hint(fake_home, monkeypatch):
+    from mcpmaker.engine import ProbeResult
+
+    async def fake_probe(url, headers, call_tool=None, timeout=10.0):
+        return ProbeResult(connected=True, server_name="S", tools=["x"], call_ok=False, error="boom")
+
+    monkeypatch.setattr(doctor_mod, "all_adapters", lambda: [])
+    monkeypatch.setattr(doctor_mod, "probe", fake_probe)
+    result = runner.invoke(app, ["doctor", "--url", "http://x/mcp", "--call", "x"])
+    assert result.exit_code == 1
+    assert "FAIL Call x" in result.output
+    assert "Fix:" in result.output
+
+
+def test_doctor_output_is_ascii_for_non_ascii_server_name(fake_home, monkeypatch):
+    from mcpmaker.engine import ProbeResult
+
+    async def fake_probe(url, headers, call_tool=None, timeout=10.0):
+        return ProbeResult(connected=True, server_name="Café API", tools=["x"])
+
+    monkeypatch.setattr(doctor_mod, "all_adapters", lambda: [])
+    monkeypatch.setattr(doctor_mod, "probe", fake_probe)
+    result = runner.invoke(app, ["doctor", "--url", "http://x/mcp"])
+    assert result.exit_code == 0, result.output
+    result.output.encode("ascii")
+    assert "Caf? API" in result.output

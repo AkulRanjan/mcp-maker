@@ -56,7 +56,11 @@ def run_checks(url: str, headers: dict, call: Optional[str]) -> List[Check]:
             if result.call_ok:
                 checks.append(Check(f"Call {call}", "OK"))
             else:
-                checks.append(Check(f"Call {call}", "FAIL", result.error or "tool returned an error"))
+                checks.append(Check(
+                    f"Call {call}", "FAIL",
+                    f"{result.error or 'tool returned an error'}. Fix: check the tool name (see the tool list above / "
+                    "mcpmaker startup log), that it takes no required arguments, and that --header is accepted by the route",
+                ))
 
     for adapter in all_adapters():
         label = f"{adapter.display_name} configured"
@@ -85,7 +89,9 @@ def run_checks(url: str, headers: dict, call: Optional[str]) -> List[Check]:
 
 def print_checks(checks: List[Check]) -> bool:
     for check in checks:
-        typer.echo(f"{check.status:<4} {check.name}" + (f": {check.detail}" if check.detail else ""))
+        line = f"{check.status:<4} {check.name}" + (f": {check.detail}" if check.detail else "")
+        # Server-supplied text may be non-ASCII; keep output safe for any console encoding.
+        typer.echo(line.encode("ascii", "replace").decode("ascii"))
     return any(c.status == "FAIL" for c in checks)
 
 
