@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from mcpmaker.clients.base import ClientAdapter
+from mcpmaker.clients.claude_code import ClaudeCodeAdapter
 from mcpmaker.clients.claude_desktop import ClaudeDesktopAdapter
 from mcpmaker.clients.cursor import CursorAdapter
 from mcpmaker.clients.vscode import VSCodeAdapter
@@ -10,4 +11,4 @@ from mcpmaker.clients.windsurf import WindsurfAdapter
 
 
 def all_adapters() -> list[ClientAdapter]:
-    return [CursorAdapter(), VSCodeAdapter(), WindsurfAdapter(), ClaudeDesktopAdapter()]
+    return [ClaudeCodeAdapter(), CursorAdapter(), VSCodeAdapter(), WindsurfAdapter(), ClaudeDesktopAdapter()]
