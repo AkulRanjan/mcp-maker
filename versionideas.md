@@ -91,8 +91,38 @@ Takeaway: FastAPI/OpenAPI → MCP conversion alone is commoditized. Our wedge mu
 
 ---
 
+## Decisions made during v1 implementation (2026-09-30)
+
+- **VS Code gets literal header values.** Its docs show no `${env:VAR}` support in headers, and an open VS Code issue says the value isn't expanded. So `connect` writes the real token and warns you. Revisit this if VS Code adds env support.
+- **Windsurf path kept at `~/.codeium/windsurf/mcp_config.json`.** Windsurf's docs now redirect to Devin, and the newest installs may use `~/.config/devin/`. Re-verify.
+- **Claude Desktop runs `<python> -m mcpmaker bridge`** using an absolute interpreter path, because Desktop launches with a minimal PATH.
+- **Claude Code keeps `${VAR}` references,** since its docs say it expands them. This isn't confirmed specifically for user scope.
+- **Tool names collapse `__` to `_`,** to match what FastMCP 3.4.7 exposes.
+- **The bridge relies on private FastMCP internals,** so it stays alive when the upstream is down. A test guards this, and FastMCP is pinned `<4`.
+- **Header values are masked everywhere:** in copy-paste snippets, doctor output, error messages, and bad-header errors.
+
+## v1 backlog (from reviews; not blocking)
+
+- `serve` shows hints written for `mount_mcp` users (`include_writes=True`) where it should show its CLI flags (`--include-writes`).
+- Warn when `connect` runs from a temporary `uvx` interpreter, because the Claude Desktop entry breaks when uv's cache is pruned.
+- `doctor` compares URLs exactly, so a trailing slash causes a false FAIL.
+- Redaction misses partial token echoes (for example, a token printed without its `Bearer ` prefix).
+- Duplicate operationIds in user-supplied specs collide silently. Also, a dedupe suffix on a 64-character name can produce `__2`.
+- `mount_mcp` builds requests with `Host: mcpmaker.internal`, so apps using `TrustedHostMiddleware` will reject tool calls.
+- A custom `generate_unique_id_function` loses to function names in tool naming.
+- The Claude Desktop MSIX install path on Windows is unverified.
+- Test gaps:
+  - `/mcp` never redirects
+  - 503 after shutdown
+  - 403 hint
+  - `MAX_BODY` truncation
+  - multi-header `claude mcp add`
+  - `doctor` 401 and zero-tools paths
+  - interactive prompt paths in `connect`
+- Grammar: "1 tools" and "1 write routes".
+
+---
+
 ## Open questions (still to decide)
 
-- Transport: Streamable HTTP only, or also stdio for local clients?
-- Tool naming & descriptions — from `operationId` / docstrings? Allow overrides?
-- Package name / branding.
+- Package name / branding. `mcpmaker` is a placeholder.
