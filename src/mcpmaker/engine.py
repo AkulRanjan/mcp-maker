@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import contextvars
 import logging
+from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping, TypeVar
 
 import httpx
-from fastmcp import FastMCP
+from fastmcp import Client, FastMCP
+from fastmcp.client.transports import StreamableHttpTransport
 from fastmcp.exceptions import ToolError
 from fastmcp.server.dependencies import get_http_headers
 from fastmcp.server.middleware import Middleware
@@ -139,3 +141,48 @@ def build_server(
         return server
 
     return build_with_fallback(selection.exposed, attempt)
+
+
+@dataclass
+class ProbeResult:
+    connected: bool
+    server_name: str | None = None
+    tools: list[str] = field(default_factory=list)
+    call_ok: bool | None = None
+    error: str | None = None
+    status_code: int | None = None
+
+
+async def probe(
+    url: str, headers: Mapping[str, str], call_tool: str | None = None, timeout: float = 10.0
+) -> ProbeResult:
+    """Connect to an MCP endpoint like a client would and report what works."""
+    transport = StreamableHttpTransport(url, headers=dict(headers))
+    try:
+        async with Client(transport, timeout=timeout) as client:
+            info = client.initialize_result.serverInfo
+            result = ProbeResult(connected=True, server_name=info.name)
+            result.tools = [tool.name for tool in await client.list_tools()]
+            if call_tool:
+                called = await client.call_tool(call_tool, {}, raise_on_error=False)
+                result.call_ok = not called.is_error
+                if called.is_error:
+                    result.error = " ".join(getattr(c, "text", "") for c in called.content).strip()
+            return result
+    except Exception as exc:
+        return ProbeResult(connected=False, error=f"{type(exc).__name__}: {exc}", status_code=_find_status(exc))
+
+
+def _find_status(exc: BaseException) -> int | None:
+    """Dig an HTTP status out of nested/grouped exceptions raised by the MCP client."""
+    stack, seen = [exc], set()
+    while stack:
+        current = stack.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        if isinstance(current, httpx.HTTPStatusError):
+            return current.response.status_code
+        stack.extend(getattr(current, "exceptions", ()) or ())
+        stack.extend(e for e in (current.__cause__, current.__context__) if e is not None)
+    return None
